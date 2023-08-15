@@ -22,28 +22,28 @@ impl<N: Network> PoolMessage<N> {
     pub fn auth_request(self) -> Option<AuthRequest> {
         match self {
             Self::AuthRequest(request) => Some(request),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn auth_response(self) -> Option<AuthResponse<N>> {
         match self {
             Self::AuthResponse(response) => Some(response),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn new_task(self) -> Option<NewTask<N>> {
         match self {
             Self::NewTask(new_task) => Some(new_task),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn new_solution(self) -> Option<NewSolution<N>> {
         match self {
             Self::NewSolution(new_solution) => Some(new_solution),
-            _ => None
+            _ => None,
         }
     }
 }
