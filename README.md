@@ -1,5 +1,7 @@
 ### Aleo-mining-protocol V0.1
 
+![image-20230815151444019](https://cdn.jsdelivr.net/gh/ghostant-1017/img@main/img/image-20230815151444019.png)
+
 1.`Clien` send `AuthRequest` to `Pool`
 
 ```json
