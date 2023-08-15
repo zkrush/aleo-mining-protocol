@@ -5,7 +5,10 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 use log::info;
-use snarkvm_console_network::{Network, Testnet3};
+use snarkvm::prelude::{
+    coinbase::{EpochChallenge, ProverSolution},
+    Address, Network,
+};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 #[tokio::main]

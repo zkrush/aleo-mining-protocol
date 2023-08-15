@@ -1,8 +1,10 @@
+use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use snarkvm_console_network::Network;
-use snarkvm_console_types_address::{Address, SerializeStruct};
-use snarkvm_ledger_coinbase::{EpochChallenge, ProverSolution};
+use snarkvm::prelude::{
+    coinbase::{EpochChallenge, ProverSolution},
+    Address, Network,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
@@ -173,12 +175,16 @@ impl<'de, N: Network> Deserialize<'de> for NewSolution<N> {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
-    use serde_json::json;
-    use snarkvm_console_network::Testnet3;
-    use snarkvm_console_types_address::FromStr;
-    use snarkvm_ledger_coinbase::PartialSolution;
-    use snarkvm_utilities::TestRng;
+    use rand::Rng;
+    use snarkvm::algorithms::polycommit::kzg10::{KZGCommitment, KZGProof};
+    use snarkvm::prelude::Uniform;
+    use snarkvm::{
+        prelude::{coinbase::PartialSolution, Testnet3},
+        utilities::TestRng,
+    };
+    use std::str::FromStr;
+
+    use super::*;
 
     #[test]
     fn test_serialize_auth_request() {
@@ -215,10 +221,6 @@ mod tests {
 
     #[test]
     fn test_serialize_new_solution() {
-        use snarkvm_algorithms::polycommit::kzg10::KZGCommitment;
-        use snarkvm_algorithms::polycommit::kzg10::KZGProof;
-        use snarkvm_console_types_address::Rng;
-        use snarkvm_utilities::Uniform;
         let mut rng = TestRng::default();
         let address: Address<Testnet3> =
             Address::from_str("aleo1rhgdu77hgyqd3xjj8ucu3jj9r2krwz6mnzyd80gncr5fxcwlh5rsvzp9px")

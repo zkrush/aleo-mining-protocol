@@ -7,10 +7,11 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 use log::*;
-use serde_json::json;
-use snarkvm_console_network::{Network, Testnet3};
-use snarkvm_console_types_address::{Address, FromStr};
-use snarkvm_ledger_coinbase::EpochChallenge;
+use snarkvm::prelude::{
+    coinbase::{EpochChallenge, ProverSolution},
+    Address, Network,
+};
+
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{accept_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 pub struct PoolState<N: Network> {
