@@ -6,7 +6,7 @@ use snarkvm::prelude::{
     Address, Network,
 };
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 #[serde(bound(serialize = "N: Serialize", deserialize = "N: for<'a> Deserialize<'a>"))]
 pub enum PoolMessage<N: Network> {
@@ -50,13 +50,13 @@ impl<N: Network> PoolMessage<N> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AuthRequest {
     // miner account or aleo address
     pub username: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(bound(serialize = "N: Serialize", deserialize = "N: for<'a> Deserialize<'a>"))]
 pub struct AuthResponse<N: Network> {
     // Indicate the `AuthRequest` is success or not.
@@ -67,13 +67,13 @@ pub struct AuthResponse<N: Network> {
     pub message: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NewTask<N: Network> {
     pub epoch_challenge: EpochChallenge<N>,
     pub difficulty: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NewSolution<N: Network> {
     epoch_number: u32,
     solution: ProverSolution<N>,
