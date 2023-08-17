@@ -54,6 +54,7 @@ impl<N: Network> PoolMessage<N> {
 pub struct AuthRequest {
     // miner account or aleo address
     pub username: String,
+    pub metadata: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -182,16 +183,24 @@ mod tests {
         prelude::{coinbase::PartialSolution, Testnet3},
         utilities::TestRng,
     };
+    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
 
     #[test]
     fn test_serialize_auth_request() {
+        let mut metadata = HashMap::new();
+        metadata.insert("machine_name", "test123");
         let message = PoolMessage::<Testnet3>::AuthRequest(AuthRequest {
             username: "test_username".to_string(),
+            metadata: json!(metadata)
         });
-        println!("{}", json!(message));
+        let mut serialized = json!(message);
+        serialized["metadata"].take();
+
+        let message_without_meta: PoolMessage<Testnet3> = serde_json::from_value(serialized).unwrap();
+        println!("{:?}", message_without_meta);
     }
 
     #[test]
