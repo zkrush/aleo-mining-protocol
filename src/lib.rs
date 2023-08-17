@@ -75,8 +75,8 @@ pub struct NewTask<N: Network> {
 
 #[derive(Debug, Clone)]
 pub struct NewSolution<N: Network> {
-    epoch_number: u32,
-    solution: ProverSolution<N>,
+    pub epoch_number: u32,
+    pub solution: ProverSolution<N>,
 }
 
 impl<N: Network> serde::ser::Serialize for NewTask<N> {
