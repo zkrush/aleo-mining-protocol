@@ -1,3 +1,6 @@
+mod connection;
+mod client;
+
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
