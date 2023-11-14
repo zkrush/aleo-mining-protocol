@@ -55,7 +55,12 @@ impl<N: Network> Client<N> {
             while let Some(Ok(msg)) = incoming.next().await {
                 match msg {
                     Message::Text(text) => {
-                        let pool_msg = serde_json::from_str(&text).unwrap();
+                        let pool_msg = match serde_json::from_str(&text) {
+                            Ok(msg) => msg,
+                            Err(err) => {
+                                break;
+                            }
+                        };
                         match pool_msg {
                             PoolMessage::NewTask(task) => {
                                 if tx.send(task).await.is_err() {
