@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{env, net::SocketAddr, str::FromStr, sync::Arc};
 
 use aleo_mining_protocol::{AuthResponse, NewTask, PoolMessage};
 use anyhow::{ensure, Result};
@@ -7,13 +7,13 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 use log::*;
-use snarkvm::prelude::{
-    coinbase::{EpochChallenge, ProverSolution},
-    Address, Network,
+use snarkvm::{
+    console::network::Testnet3,
+    prelude::{coinbase::EpochChallenge, Address, Network},
 };
 
 use tokio::net::{TcpListener, TcpStream};
-use tokio_tungstenite::{accept_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{accept_async, tungstenite::Message, WebSocketStream};
 pub struct PoolState<N: Network> {
     address: Address<N>,
     epoch_challenge: EpochChallenge<N>,
@@ -60,7 +60,7 @@ async fn handle_connection<N: Network>(
     // 2. Send auth response
     let message = PoolMessage::AuthResponse(AuthResponse {
         result: true,
-        address: state.address.clone(),
+        address: state.address,
         message: None,
     });
     send_frame(&mut outgoing, message).await?;

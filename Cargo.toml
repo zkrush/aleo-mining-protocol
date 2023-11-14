@@ -20,7 +20,10 @@ snarkvm = {version = "0.16.8", features = ["console", "ledger", "utilities", "al
 serde_json = "1"
 serde = {version = "1", features = ["derive"] }
 
-anyhow = "1"
-tokio = {version = "1", features = ["full"]}
-tokio-tungstenite = "0.20"
-futures-util = { version = "0.3.28"}
+anyhow = {version = "1", optional = true}
+tokio = {version = "1", features = ["full"], optional = true}
+tokio-tungstenite = {version = "0.20", optional = true}
+futures-util = { version = "0.3.28", optional =  true}
+
+[features]
+client = ["anyhow", "tokio", "tokio-tungstenite", "futures-util"]

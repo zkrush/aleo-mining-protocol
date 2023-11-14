@@ -1,5 +1,7 @@
+#[cfg(feature = "client")]
+pub mod client;
+#[cfg(feature = "client")]
 mod connection;
-mod client;
 
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
@@ -197,12 +199,13 @@ mod tests {
         metadata.insert("machine_name", "test123");
         let message = PoolMessage::<Testnet3>::AuthRequest(AuthRequest {
             username: "test_username".to_string(),
-            metadata: json!(metadata)
+            metadata: json!(metadata),
         });
         let mut serialized = json!(message);
         serialized["metadata"].take();
 
-        let message_without_meta: PoolMessage<Testnet3> = serde_json::from_value(serialized).unwrap();
+        let message_without_meta: PoolMessage<Testnet3> =
+            serde_json::from_value(serialized).unwrap();
         println!("{:?}", message_without_meta);
     }
 
