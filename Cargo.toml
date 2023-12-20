@@ -27,3 +27,4 @@ futures-util = { version = "0.3.28", optional =  true}
 
 [features]
 client = ["anyhow", "tokio", "tokio-tungstenite", "futures-util"]
+pubsub = ["anyhow", "tokio", "tokio-tungstenite", "futures-util"]
