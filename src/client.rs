@@ -1,11 +1,12 @@
 use std::sync::atomic::AtomicBool;
 
+use crate::connection::read_pool_message_from_stream;
 use crate::{connection::Connection, AuthRequest, AuthResponse, NewTask};
 use crate::{NewSolution, PoolMessage};
-use futures_util::StreamExt;
+
 use snarkvm::prelude::Network;
 use tokio::sync::mpsc::Receiver;
-use tokio_tungstenite::tungstenite::Message;
+
 pub struct Client<N: Network> {
     authed: AtomicBool,
     connection: Connection<N>,
@@ -36,14 +37,13 @@ impl<N: Network> Client<N> {
             .connection
             .read_pool_message()
             .await?
-            .ok_or(anyhow::anyhow!("Connection to server has broken"))?
             .auth_response()
             .ok_or(anyhow::anyhow!("Unexpected message type"))?;
         self.authed.store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(response)
     }
 
-    pub async fn subscribe(&mut self) -> anyhow::Result<Receiver<NewTask<N>>> {
+    pub async fn subscribe(&mut self) -> anyhow::Result<Receiver<anyhow::Result<NewTask<N>>>> {
         if !self.is_authed() {
             return Err(anyhow::anyhow!("Not authed"));
         }
@@ -52,25 +52,25 @@ impl<N: Network> Client<N> {
         ))?;
         let (tx, rx) = tokio::sync::mpsc::channel(1);
         tokio::spawn(async move {
-            while let Some(Ok(msg)) = incoming.next().await {
-                match msg {
-                    Message::Text(text) => {
-                        let pool_msg = match serde_json::from_str(&text) {
-                            Ok(msg) => msg,
-                            Err(err) => {
-                                break;
-                            }
-                        };
-                        match pool_msg {
-                            PoolMessage::NewTask(task) => {
-                                if tx.send(task).await.is_err() {
-                                    break;
-                                }
-                            }
-                            _ => break,
+            loop {
+                // Only handle the PollMessage::NewTask from incoming stream,
+                // break if any other message type is received
+                match read_pool_message_from_stream::<N>(&mut incoming).await {
+                    Ok(PoolMessage::NewTask(task)) => {
+                        if let Err(_) = tx.send(Ok(task)).await {
+                            break;
+                        }
+                    },
+                    Ok(_) => {
+                        if let Err(_) = tx.send(Err(anyhow::anyhow!("Unexpected message type"))).await {
+                            break;
                         }
                     }
-                    _ => break,
+                    Err(err) => {
+                        if let Err(_) = tx.send(Err(err)).await {
+                            break;
+                        }
+                    }
                 }
             }
         });

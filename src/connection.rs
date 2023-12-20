@@ -19,8 +19,8 @@ pub type SplitStream = FutureSplitStream<WebSocketStream>;
 pub type SplitSink = FutureSplitSink<WebSocketStream, Message>;
 
 pub struct Connection<N: Network> {
-    pub outgoing: Option<SplitSink>,
-    pub incoming: Option<SplitStream>,
+    outgoing: SplitSink,
+    incoming: Option<SplitStream>,
     broken: AtomicBool,
     _p: PhantomData<N>,
 }
@@ -33,14 +33,14 @@ impl<N: Network> Connection<N> {
     pub fn new(ws: WebSocketStream) -> Self {
         let (outgoing, incoming) = ws.split();
         Self {
-            outgoing: Some(outgoing),
+            outgoing,
             incoming: Some(incoming),
             broken: AtomicBool::new(false),
             _p: PhantomData,
         }
     }
 
-    pub async fn read_pool_message(&mut self) -> anyhow::Result<Option<PoolMessage<N>>> {
+    pub async fn read_pool_message(&mut self) -> anyhow::Result<PoolMessage<N>> {
         if self.is_broken() {
             return Err(anyhow::anyhow!("Connection to server has broken"));
         }
@@ -48,18 +48,7 @@ impl<N: Network> Connection<N> {
             None => return Err(anyhow::anyhow!("Incoming has been taken")),
             Some(incoming) => incoming,
         };
-        let ws_msg = match incoming.next().await {
-            None => {
-                self.broken.store(true, Ordering::SeqCst);
-                return Ok(None);
-            }
-            Some(ws_msg) => ws_msg?,
-        };
-        let pool_msg = match ws_msg {
-            Message::Text(text) => serde_json::from_str(&text)?,
-            _ => return Err(anyhow::anyhow!("Unexpected message type")),
-        };
-
+        let pool_msg = read_pool_message_from_stream::<N>(incoming).await?;
         Ok(pool_msg)
     }
 
@@ -67,12 +56,8 @@ impl<N: Network> Connection<N> {
         if self.is_broken() {
             return Err(anyhow::anyhow!("Connection to server has broken"));
         }
-        let outgoing = match self.outgoing.as_mut() {
-            Some(outgoing) => outgoing,
-            None => return Err(anyhow::anyhow!("Outgoing has been taken")),
-        };
         let text = serde_json::to_string(&msg)?;
-        outgoing.send(Message::Text(text)).await?;
+        self.outgoing.send(Message::Text(text)).await?;
         Ok(())
     }
 
@@ -82,4 +67,16 @@ impl<N: Network> Connection<N> {
         }
         Ok(self.incoming.take())
     }
+}
+
+pub async fn read_pool_message_from_stream<N: Network>(incoming: &mut SplitStream) -> anyhow::Result<PoolMessage<N>> {
+    let ws_msg = match incoming.next().await {
+        None => return Err(anyhow::anyhow!("Connection to server has broken")),
+        Some(ws_msg) => ws_msg?,
+    };
+    let pool_msg = match ws_msg {
+        Message::Text(text) => serde_json::from_str(&text)?,
+        _ => return Err(anyhow::anyhow!("Unexpected message type")),
+    };
+    Ok(pool_msg)
 }
