@@ -10,9 +10,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 use tokio::net::TcpStream;
-use tokio_tungstenite::{
-    tungstenite::Message, MaybeTlsStream, WebSocketStream as TokioWebSocketStream,
-};
+use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream as TokioWebSocketStream};
 
 type WebSocketStream = TokioWebSocketStream<MaybeTlsStream<TcpStream>>;
 pub type SplitStream = FutureSplitStream<WebSocketStream>;

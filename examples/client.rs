@@ -21,10 +21,7 @@ async fn main() -> Result<()> {
             metadata: json!({"machine_name": "test123"}),
         })
         .await?;
-    info!(
-        "[aleo-mining-protocol] receive auth response: {:?}",
-        auth_response
-    );
+    info!("[aleo-mining-protocol] receive auth response: {:?}", auth_response);
 
     // 3. Read new task
     info!("[aleo-mining-protocol] subscribe new task");

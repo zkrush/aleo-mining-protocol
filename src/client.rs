@@ -30,9 +30,7 @@ impl<N: Network> Client<N> {
         if self.is_authed() {
             return Err(anyhow::anyhow!("Already authed"));
         }
-        self.connection
-            .write_pool_message(PoolMessage::AuthRequest(request))
-            .await?;
+        self.connection.write_pool_message(PoolMessage::AuthRequest(request)).await?;
         let response = self
             .connection
             .read_pool_message()
@@ -47,9 +45,11 @@ impl<N: Network> Client<N> {
         if !self.is_authed() {
             return Err(anyhow::anyhow!("Not authed"));
         }
-        let mut incoming = self.connection.take_stream().await?.ok_or(anyhow::anyhow!(
-            "Connection to server has broken or stream has been taken"
-        ))?;
+        let mut incoming = self
+            .connection
+            .take_stream()
+            .await?
+            .ok_or(anyhow::anyhow!("Connection to server has broken or stream has been taken"))?;
         let (tx, rx) = tokio::sync::mpsc::channel(1);
         tokio::spawn(async move {
             loop {
@@ -60,7 +60,7 @@ impl<N: Network> Client<N> {
                         if let Err(_) = tx.send(Ok(task)).await {
                             break;
                         }
-                    },
+                    }
                     Ok(_) => {
                         if let Err(_) = tx.send(Err(anyhow::anyhow!("Unexpected message type"))).await {
                             break;
@@ -81,9 +81,7 @@ impl<N: Network> Client<N> {
         if !self.is_authed() {
             return Err(anyhow::anyhow!("Not authed"));
         }
-        self.connection
-            .write_pool_message(PoolMessage::NewSolution(solution))
-            .await?;
+        self.connection.write_pool_message(PoolMessage::NewSolution(solution)).await?;
         Ok(())
     }
 }

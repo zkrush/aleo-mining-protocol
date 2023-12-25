@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use crate::NewTask;
 use snarkvm::prelude::Network;
 use tokio::sync::Semaphore;
-use crate::NewTask;
 
 pub struct PubSub<N: Network> {
     limit: Arc<tokio::sync::Semaphore>,
@@ -54,10 +54,10 @@ impl<N: Network> PubSub<N> {
                         if let Err(_) = tx.send(task).await {
                             break;
                         }
-                    },
+                    }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                         break;
-                    },
+                    }
                     // Continue so that we will recv the latest task
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
                         continue;
