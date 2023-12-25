@@ -4,6 +4,7 @@ use crate::NewTask;
 use snarkvm::prelude::Network;
 use tokio::sync::Semaphore;
 
+#[derive(Clone)]
 pub struct PubSub<N: Network> {
     limit: Arc<tokio::sync::Semaphore>,
     task_pub: tokio::sync::broadcast::Sender<Arc<NewTask<N>>>,
@@ -11,10 +12,9 @@ pub struct PubSub<N: Network> {
 }
 
 impl<N: Network> PubSub<N> {
-    pub fn new(limit: usize) -> Self {
+    pub fn new(limit: usize, task_pub: tokio::sync::broadcast::Sender<Arc<NewTask<N>>>) -> Self {
         let limit = Arc::new(Semaphore::new(limit as usize));
         let current_task = None;
-        let (task_pub, _) = tokio::sync::broadcast::channel(1);
         Self {
             limit,
             task_pub,

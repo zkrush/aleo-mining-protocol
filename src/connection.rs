@@ -1,4 +1,5 @@
-use crate::PoolMessage;
+use crate::{PoolMessage, AuthRequest, NewSolution};
+use anyhow::bail;
 use futures_util::SinkExt;
 use futures_util::{
     stream::{SplitSink as FutureSplitSink, SplitStream as FutureSplitStream},
@@ -64,6 +65,22 @@ impl<N: Network> Connection<N> {
             return Err(anyhow::anyhow!("Connection to server has broken"));
         }
         Ok(self.incoming.take())
+    }
+
+    pub async fn read_auth_request(&mut self) -> anyhow::Result<AuthRequest> {
+        let message = self.read_pool_message().await?;
+        match message {
+            PoolMessage::AuthRequest(auth_request) => Ok(auth_request),
+            _ => bail!("Expected message type is AuthRequest"),
+        }
+    }
+
+    pub async fn read_new_solution(&mut self) -> anyhow::Result<NewSolution<N>> {
+        let message = self.read_pool_message().await?;
+        match message {
+            PoolMessage::NewSolution(new_solution) => Ok(new_solution),
+            _ => bail!("Expected message type is NewSolution"),
+        }
     }
 }
 
