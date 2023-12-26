@@ -13,7 +13,7 @@ pub struct PubSub<N: Network> {
 
 impl<N: Network> PubSub<N> {
     pub fn new(limit: usize) -> Self {
-        let limit = Arc::new(Semaphore::new(limit as usize));
+        let limit = Arc::new(Semaphore::new(limit));
         let (task_pub, mut task_sub) = tokio::sync::broadcast::channel(1);
         let current_task = Arc::new(RwLock::new(None));
         {
@@ -60,7 +60,7 @@ impl<N: Network> PubSub<N> {
                 match task_sub.recv().await {
                     Ok(task) => {
                         // Break the loop if the sub has gone
-                        if let Err(_) = tx.send(task).await {
+                        if (tx.send(task).await).is_err() {
                             break;
                         }
                     }
