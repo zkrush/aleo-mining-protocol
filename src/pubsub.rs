@@ -2,19 +2,35 @@ use std::sync::Arc;
 
 use crate::NewTask;
 use snarkvm::prelude::Network;
-use tokio::sync::Semaphore;
+use tokio::sync::{RwLock, Semaphore};
 
 #[derive(Clone)]
 pub struct PubSub<N: Network> {
     limit: Arc<tokio::sync::Semaphore>,
-    task_pub: tokio::sync::broadcast::Sender<Arc<NewTask<N>>>,
-    current_task: Option<Arc<NewTask<N>>>,
+    task_pub: tokio::sync::broadcast::Sender<NewTask<N>>,
+    current_task: Arc<RwLock<Option<NewTask<N>>>>,
 }
 
 impl<N: Network> PubSub<N> {
-    pub fn new(limit: usize, task_pub: tokio::sync::broadcast::Sender<Arc<NewTask<N>>>) -> Self {
+    pub fn new(limit: usize) -> Self {
         let limit = Arc::new(Semaphore::new(limit as usize));
-        let current_task = None;
+        let (task_pub, mut task_sub) = tokio::sync::broadcast::channel(1);
+        let current_task = Arc::new(RwLock::new(None));
+        {
+            // Spawn a task to update the current task
+            let current_task = current_task.clone();
+            tokio::spawn(async move {
+                loop {
+                    let task = match task_sub.recv().await {
+                        Ok(task) => task,
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    };
+                    *current_task.write().await = Some(task);
+                }
+            });
+        }
+
         Self {
             limit,
             task_pub,
@@ -22,25 +38,18 @@ impl<N: Network> PubSub<N> {
         }
     }
 
-    pub fn update_task(&mut self, task: NewTask<N>) {
-        let task = Arc::new(task);
-        self.current_task = Some(task.clone());
-
-        // Only fail if there are no subs, so we just ignore the error
-        let _ = self.task_pub.send(task.clone());
-    }
-
-    pub fn add_sub(&self) -> anyhow::Result<tokio::sync::mpsc::Receiver<Arc<NewTask<N>>>> {
+    // Wrap the `broadcast::Receiver`, so that we can send first task to the new sub
+    pub fn add_sub(&self) -> anyhow::Result<tokio::sync::mpsc::Receiver<NewTask<N>>> {
         // Ensure we dont have too many subs
         let _permit = self.limit.clone().try_acquire_owned()?;
         let mut task_sub = self.task_pub.subscribe();
         let (tx, rx) = tokio::sync::mpsc::channel(1);
-        let mut current_task = self.current_task.clone();
+        let current_task = self.current_task.clone();
         tokio::spawn(async move {
             // Move the permit into the task, so that it is released when the task is dropped
             let _permit = _permit;
             // 1. If we have task now, send it to the new subscriber
-            if let Some(task) = current_task.take() {
+            if let Some(task) = current_task.read().await.clone() {
                 // Ignore the error if the sub has gone
                 if let Err(_) = tx.send(task).await {
                     return;
@@ -66,5 +75,9 @@ impl<N: Network> PubSub<N> {
             }
         });
         Ok(rx)
+    }
+
+    pub fn task_pub(&self) -> tokio::sync::broadcast::Sender<NewTask<N>> {
+        self.task_pub.clone()
     }
 }

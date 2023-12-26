@@ -1,4 +1,4 @@
-use crate::{PoolMessage, AuthRequest, NewSolution};
+use crate::{AuthRequest, NewSolution, PoolMessage};
 use anyhow::bail;
 use futures_util::SinkExt;
 use futures_util::{
