@@ -51,7 +51,7 @@ impl<N: Network> PubSub<N> {
             // 1. If we have task now, send it to the new subscriber
             if let Some(task) = current_task.read().await.clone() {
                 // Ignore the error if the sub has gone
-                if let Err(_) = tx.send(task).await {
+                if tx.send(task).await.is_err() {
                     return;
                 }
             }
