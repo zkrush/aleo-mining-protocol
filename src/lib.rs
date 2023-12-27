@@ -2,8 +2,6 @@
 pub mod client;
 #[cfg(feature = "client")]
 pub mod connection;
-#[cfg(feature = "pubsub")]
-pub mod pubsub;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
