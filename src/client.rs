@@ -57,17 +57,17 @@ impl<N: Network> Client<N> {
                 // break if any other message type is received
                 match read_pool_message_from_stream::<N>(&mut incoming).await {
                     Ok(PoolMessage::NewTask(task)) => {
-                        if let Err(_) = tx.send(Ok(task)).await {
+                        if tx.send(Ok(task)).await.is_err() {
                             break;
                         }
                     }
                     Ok(_) => {
-                        if let Err(_) = tx.send(Err(anyhow::anyhow!("Unexpected message type"))).await {
+                        if tx.send(Err(anyhow::anyhow!("Unexpected message type"))).await.is_err() {
                             break;
                         }
                     }
                     Err(err) => {
-                        if let Err(_) = tx.send(Err(err)).await {
+                        if tx.send(Err(err)).await.is_err() {
                             break;
                         }
                     }
