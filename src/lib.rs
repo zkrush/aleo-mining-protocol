@@ -72,13 +72,13 @@ pub struct AuthResponse<N: Network> {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewTask<N: Network> {
     pub epoch_challenge: EpochChallenge<N>,
     pub difficulty: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewSolution<N: Network> {
     pub epoch_number: u32,
     pub solution: ProverSolution<N>,
