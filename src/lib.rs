@@ -1,3 +1,7 @@
+#[cfg(feature = "client")]
+pub mod client;
+#[cfg(feature = "client")]
+pub mod connection;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -5,6 +9,7 @@ use snarkvm::prelude::{
     coinbase::{EpochChallenge, ProverSolution},
     Address, Network,
 };
+use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
@@ -50,6 +55,27 @@ impl<N: Network> PoolMessage<N> {
     }
 }
 
+impl<N: Network> TryFrom<Message> for PoolMessage<N> {
+    type Error = anyhow::Error;
+
+    fn try_from(message: Message) -> Result<Self, Self::Error> {
+        let message = match message {
+            Message::Text(text) => text,
+            _ => return Err(anyhow::anyhow!("Unexpected message type")),
+        };
+        serde_json::from_str(&message).map_err(anyhow::Error::msg)
+    }
+}
+
+impl<N: Network> TryFrom<PoolMessage<N>> for Message {
+    type Error = anyhow::Error;
+
+    fn try_from(message: PoolMessage<N>) -> Result<Self, Self::Error> {
+        let message = serde_json::to_string(&message).map_err(anyhow::Error::msg)?;
+        Ok(Message::Text(message))
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AuthRequest {
     // miner account or aleo address
@@ -68,13 +94,13 @@ pub struct AuthResponse<N: Network> {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewTask<N: Network> {
     pub epoch_challenge: EpochChallenge<N>,
     pub difficulty: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewSolution<N: Network> {
     pub epoch_number: u32,
     pub solution: ProverSolution<N>,
@@ -88,14 +114,8 @@ impl<N: Network> serde::ser::Serialize for NewTask<N> {
         let mut m_ctx = serializer.serialize_struct("NewTask", false as usize + 1 + 1)?;
         // epoch challenge
         let mut inner = serde_json::Map::new();
-        inner.insert(
-            "epoch_number".to_owned(),
-            self.epoch_challenge.epoch_number().into(),
-        );
-        inner.insert(
-            "epoch_block_hash".to_owned(),
-            json!(self.epoch_challenge.epoch_block_hash()),
-        );
+        inner.insert("epoch_number".to_owned(), self.epoch_challenge.epoch_number().into());
+        inner.insert("epoch_block_hash".to_owned(), json!(self.epoch_challenge.epoch_block_hash()));
         inner.insert("degree".to_owned(), self.epoch_challenge.degree().into());
         m_ctx.serialize_field("epoch_challenge", &inner)?;
 
@@ -112,33 +132,22 @@ impl<'de, N: Network> serde::de::Deserialize<'de> for NewTask<N> {
     {
         let mut new_work = serde_json::Value::deserialize(deserializer)?;
         // epoch challenge
-        let inner: serde_json::Map<_, _> =
-            serde_json::from_value(new_work["epoch_challenge"].take())
-                .map_err(serde::de::Error::custom)?;
-        let epoch_number = inner
-            .get("epoch_number")
-            .ok_or(serde::de::Error::custom("missing epoch_number"))?;
-        let epoch_number: u32 =
-            serde_json::from_value(epoch_number.clone()).map_err(serde::de::Error::custom)?;
+        let inner: serde_json::Map<_, _> = serde_json::from_value(new_work["epoch_challenge"].take()).map_err(serde::de::Error::custom)?;
+        let epoch_number = inner.get("epoch_number").ok_or(serde::de::Error::custom("missing epoch_number"))?;
+        let epoch_number: u32 = serde_json::from_value(epoch_number.clone()).map_err(serde::de::Error::custom)?;
 
         let epoch_block_hash = inner
             .get("epoch_block_hash")
             .ok_or(serde::de::Error::custom("missing epoch_block_hash"))?;
-        let epoch_block_hash: N::BlockHash =
-            serde_json::from_value(epoch_block_hash.clone()).map_err(serde::de::Error::custom)?;
+        let epoch_block_hash: N::BlockHash = serde_json::from_value(epoch_block_hash.clone()).map_err(serde::de::Error::custom)?;
 
-        let degree = inner
-            .get("degree")
-            .ok_or(serde::de::Error::custom("missing degree"))?;
-        let degree: u32 =
-            serde_json::from_value(degree.clone()).map_err(serde::de::Error::custom)?;
+        let degree = inner.get("degree").ok_or(serde::de::Error::custom("missing degree"))?;
+        let degree: u32 = serde_json::from_value(degree.clone()).map_err(serde::de::Error::custom)?;
 
-        let difficulty: u64 = serde_json::from_value(new_work["difficulty"].take())
-            .map_err(serde::de::Error::custom)?;
+        let difficulty: u64 = serde_json::from_value(new_work["difficulty"].take()).map_err(serde::de::Error::custom)?;
 
         Ok(Self {
-            epoch_challenge: EpochChallenge::new(epoch_number, epoch_block_hash, degree)
-                .map_err(serde::de::Error::custom)?,
+            epoch_challenge: EpochChallenge::new(epoch_number, epoch_block_hash, degree).map_err(serde::de::Error::custom)?,
             difficulty,
         })
     }
@@ -162,15 +171,10 @@ impl<'de, N: Network> Deserialize<'de> for NewSolution<N> {
         D: serde::Deserializer<'de>,
     {
         let mut m_result = serde_json::Value::deserialize(deserializer)?;
-        let solution: ProverSolution<N> = serde_json::from_value(m_result["solution"].take())
-            .map_err(serde::de::Error::custom)?;
-        let epoch_number: u32 = serde_json::from_value(m_result["epoch_number"].take())
-            .map_err(serde::de::Error::custom)?;
+        let solution: ProverSolution<N> = serde_json::from_value(m_result["solution"].take()).map_err(serde::de::Error::custom)?;
+        let epoch_number: u32 = serde_json::from_value(m_result["epoch_number"].take()).map_err(serde::de::Error::custom)?;
 
-        Ok(Self {
-            solution,
-            epoch_number,
-        })
+        Ok(Self { solution, epoch_number })
     }
 }
 
@@ -194,7 +198,7 @@ mod tests {
         metadata.insert("machine_name", "test123");
         let message = PoolMessage::<Testnet3>::AuthRequest(AuthRequest {
             username: "test_username".to_string(),
-            metadata: json!(metadata)
+            metadata: json!(metadata),
         });
         let mut serialized = json!(message);
         serialized["metadata"].take();
@@ -205,9 +209,7 @@ mod tests {
 
     #[test]
     fn test_serialize_auth_response() {
-        let address: Address<Testnet3> =
-            Address::from_str("aleo1rhgdu77hgyqd3xjj8ucu3jj9r2krwz6mnzyd80gncr5fxcwlh5rsvzp9px")
-                .unwrap();
+        let address: Address<Testnet3> = Address::from_str("aleo1rhgdu77hgyqd3xjj8ucu3jj9r2krwz6mnzyd80gncr5fxcwlh5rsvzp9px").unwrap();
         let message = PoolMessage::<Testnet3>::AuthResponse(AuthResponse {
             result: true,
             address,
@@ -231,11 +233,8 @@ mod tests {
     #[test]
     fn test_serialize_new_solution() {
         let mut rng = TestRng::default();
-        let address: Address<Testnet3> =
-            Address::from_str("aleo1rhgdu77hgyqd3xjj8ucu3jj9r2krwz6mnzyd80gncr5fxcwlh5rsvzp9px")
-                .unwrap();
-        let partial_solution =
-            PartialSolution::new(address, u64::rand(&mut rng), KZGCommitment(rng.gen()));
+        let address: Address<Testnet3> = Address::from_str("aleo1rhgdu77hgyqd3xjj8ucu3jj9r2krwz6mnzyd80gncr5fxcwlh5rsvzp9px").unwrap();
+        let partial_solution = PartialSolution::new(address, u64::rand(&mut rng), KZGCommitment(rng.gen()));
         let solution = ProverSolution::new(
             partial_solution,
             KZGProof {
@@ -243,10 +242,7 @@ mod tests {
                 random_v: None,
             },
         );
-        let message = PoolMessage::<Testnet3>::NewSolution(NewSolution {
-            solution,
-            epoch_number: 0,
-        });
+        let message = PoolMessage::<Testnet3>::NewSolution(NewSolution { solution, epoch_number: 0 });
         let serialized = json!(message);
         println!("{}", serialized);
         let message: PoolMessage<Testnet3> = serde_json::from_str(&serialized.to_string()).unwrap();
