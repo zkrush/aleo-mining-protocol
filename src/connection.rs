@@ -1,10 +1,10 @@
 use crate::{AuthRequest, AuthResponse, NewSolution, NewTask, PoolMessage};
 
+use futures_util::SinkExt;
 use futures_util::{
     stream::{SplitSink as FutureSplitSink, SplitStream as FutureSplitStream},
     StreamExt,
 };
-use futures_util::SinkExt;
 use snarkvm::prelude::Network;
 use std::marker::PhantomData;
 
@@ -37,7 +37,7 @@ impl<N: Network> Connection<N> {
         mut ws: WebSocketStream,
         mut outgoing_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
         incoming_tx: tokio::sync::mpsc::Sender<PoolMessage<N>>,
-        enable_hb: bool
+        enable_hb: bool,
     ) -> anyhow::Result<()> {
         let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(15));
         // 1.Receive messages from the outgoing_rx and send them though the websocket
