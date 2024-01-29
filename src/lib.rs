@@ -9,6 +9,7 @@ use snarkvm::prelude::{
     coinbase::{EpochChallenge, ProverSolution},
     Address, Network,
 };
+use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
@@ -51,6 +52,27 @@ impl<N: Network> PoolMessage<N> {
             Self::NewSolution(new_solution) => Some(new_solution),
             _ => None,
         }
+    }
+}
+
+impl<N: Network> TryFrom<Message> for PoolMessage<N> {
+    type Error = anyhow::Error;
+
+    fn try_from(message: Message) -> Result<Self, Self::Error> {
+        let message = match message {
+            Message::Text(text) => text,
+            _ => return Err(anyhow::anyhow!("Unexpected message type")),
+        };
+        serde_json::from_str(&message).map_err(anyhow::Error::msg)
+    }
+}
+
+impl<N: Network> TryFrom<PoolMessage<N>> for Message {
+    type Error = anyhow::Error;
+
+    fn try_from(message: PoolMessage<N>) -> Result<Self, Self::Error> {
+        let message = serde_json::to_string(&message).map_err(anyhow::Error::msg)?;
+        Ok(Message::Text(message))
     }
 }
 

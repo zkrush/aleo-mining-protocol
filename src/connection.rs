@@ -1,15 +1,13 @@
-use crate::{AuthRequest, NewSolution, PoolMessage};
-use anyhow::bail;
-use futures_util::SinkExt;
+use crate::{AuthRequest, AuthResponse, NewSolution, NewTask, PoolMessage};
+
 use futures_util::{
     stream::{SplitSink as FutureSplitSink, SplitStream as FutureSplitStream},
     StreamExt,
 };
+use futures_util::SinkExt;
 use snarkvm::prelude::Network;
-use std::{
-    marker::PhantomData,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::marker::PhantomData;
+
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream as TokioWebSocketStream};
 
@@ -18,80 +16,97 @@ pub type SplitStream = FutureSplitStream<WebSocketStream>;
 pub type SplitSink = FutureSplitSink<WebSocketStream, Message>;
 
 pub struct Connection<N: Network> {
-    outgoing: SplitSink,
-    incoming: Option<SplitStream>,
-    broken: AtomicBool,
+    incoming_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
+    outgoing_tx: tokio::sync::mpsc::Sender<PoolMessage<N>>,
     _p: PhantomData<N>,
 }
 
 impl<N: Network> Connection<N> {
-    pub fn is_broken(&self) -> bool {
-        self.broken.load(Ordering::SeqCst)
-    }
-
-    pub fn new(ws: WebSocketStream) -> Self {
-        let (outgoing, incoming) = ws.split();
+    pub fn new(ws: WebSocketStream, enable_hb: bool) -> Self {
+        let (outgoing_tx, outgoing_rx) = tokio::sync::mpsc::channel(1);
+        let (incoming_tx, incoming_rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(Self::handle_inner(ws, outgoing_rx, incoming_tx, enable_hb));
         Self {
-            outgoing,
-            incoming: Some(incoming),
-            broken: AtomicBool::new(false),
+            incoming_rx,
+            outgoing_tx,
             _p: PhantomData,
         }
     }
 
-    pub async fn read_pool_message(&mut self) -> anyhow::Result<PoolMessage<N>> {
-        if self.is_broken() {
-            return Err(anyhow::anyhow!("Connection to server has broken"));
+    pub async fn handle_inner(
+        mut ws: WebSocketStream,
+        mut outgoing_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
+        incoming_tx: tokio::sync::mpsc::Sender<PoolMessage<N>>,
+        enable_hb: bool
+    ) -> anyhow::Result<()> {
+        let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(15));
+        // 1.Receive messages from the outgoing_rx and send them though the websocket
+        // 2.When receive from the websocket, send them through the incoming_tx
+        // 3. Send ping to the websocket every 15 seconds
+        loop {
+            tokio::select! {
+                message = outgoing_rx.recv() => {
+                    let message: PoolMessage<N> = message.ok_or_else(|| anyhow::anyhow!("client dropped"))?;
+                    ws.send(message.into()).await?;
+                }
+                result = ws.next() => {
+                    let message: Message = result.ok_or_else(|| anyhow::anyhow!("connection closed"))??;
+                    match message {
+                        Message::Text(text) => {
+                            let pool_msg: PoolMessage<N> = serde_json::from_str(&text)?;
+                            incoming_tx.send(pool_msg).await?;
+                        },
+                        Message::Ping(_) => {
+                            ws.send(Message::Pong(vec![])).await?;
+                        },
+                        Message::Pong(_) => {
+                            // ignore
+                        },
+                        _ => {
+                            anyhow::bail!("Unexpected message type");
+                        }
+                    }
+                }
+                _ = heartbeat.tick() => {
+                    if enable_hb {
+                        ws.send(Message::Ping(vec![])).await?;
+                    }
+                }
+            }
         }
-        let incoming = match self.incoming.as_mut() {
-            None => return Err(anyhow::anyhow!("Incoming has been taken")),
-            Some(incoming) => incoming,
-        };
-        let pool_msg = read_pool_message_from_stream::<N>(incoming).await?;
-        Ok(pool_msg)
     }
 
-    pub async fn write_pool_message(&mut self, msg: PoolMessage<N>) -> anyhow::Result<()> {
-        if self.is_broken() {
-            return Err(anyhow::anyhow!("Connection to server has broken"));
-        }
-        let text = serde_json::to_string(&msg)?;
-        self.outgoing.send(Message::Text(text)).await?;
+    pub async fn send(&self, msg: PoolMessage<N>) -> anyhow::Result<()> {
+        self.outgoing_tx.send(msg).await?;
         Ok(())
     }
 
-    pub async fn take_stream(&mut self) -> anyhow::Result<Option<SplitStream>> {
-        if self.is_broken() {
-            return Err(anyhow::anyhow!("Connection to server has broken"));
-        }
-        Ok(self.incoming.take())
+    pub async fn next(&mut self) -> anyhow::Result<PoolMessage<N>> {
+        let message = self.incoming_rx.recv().await.ok_or_else(|| anyhow::anyhow!("connection closed"))?;
+        Ok(message)
     }
 
-    pub async fn read_auth_request(&mut self) -> anyhow::Result<AuthRequest> {
-        let message = self.read_pool_message().await?;
-        match message {
-            PoolMessage::AuthRequest(auth_request) => Ok(auth_request),
-            _ => bail!("Expected message type is AuthRequest"),
-        }
+    pub async fn next_auth_request(&mut self) -> anyhow::Result<AuthRequest> {
+        let message = self.next().await?;
+        let auth_request = message.auth_request().ok_or_else(|| anyhow::anyhow!("Unexpected message type"))?;
+        Ok(auth_request)
     }
 
-    pub async fn read_new_solution(&mut self) -> anyhow::Result<NewSolution<N>> {
-        let message = self.read_pool_message().await?;
-        match message {
-            PoolMessage::NewSolution(new_solution) => Ok(new_solution),
-            _ => bail!("Expected message type is NewSolution"),
-        }
+    pub async fn next_auth_response(&mut self) -> anyhow::Result<AuthResponse<N>> {
+        let message = self.next().await?;
+        let auth_response = message.auth_response().ok_or_else(|| anyhow::anyhow!("Unexpected message type"))?;
+        Ok(auth_response)
     }
-}
 
-pub async fn read_pool_message_from_stream<N: Network>(incoming: &mut SplitStream) -> anyhow::Result<PoolMessage<N>> {
-    let ws_msg = match incoming.next().await {
-        None => return Err(anyhow::anyhow!("Connection to server has broken")),
-        Some(ws_msg) => ws_msg?,
-    };
-    let pool_msg = match ws_msg {
-        Message::Text(text) => serde_json::from_str(&text)?,
-        _ => return Err(anyhow::anyhow!("Unexpected message type")),
-    };
-    Ok(pool_msg)
+    pub async fn next_solution(&mut self) -> anyhow::Result<NewSolution<N>> {
+        let message = self.next().await?;
+        let solution = message.new_solution().ok_or_else(|| anyhow::anyhow!("Unexpected message type"))?;
+        Ok(solution)
+    }
+
+    pub async fn next_task(&mut self) -> anyhow::Result<NewTask<N>> {
+        let message = self.next().await?;
+        let task = message.new_task().ok_or_else(|| anyhow::anyhow!("Unexpected message type"))?;
+        Ok(task)
+    }
 }

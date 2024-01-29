@@ -1,11 +1,8 @@
-use std::sync::atomic::AtomicBool;
-
-use crate::connection::read_pool_message_from_stream;
 use crate::{connection::Connection, AuthRequest, AuthResponse, NewTask};
 use crate::{NewSolution, PoolMessage};
+use std::sync::atomic::AtomicBool;
 
 use snarkvm::prelude::Network;
-use tokio::sync::mpsc::Receiver;
 
 pub struct Client<N: Network> {
     authed: AtomicBool,
@@ -19,7 +16,7 @@ impl<N: Network> Client<N> {
 
     pub async fn connect(dest: &str) -> anyhow::Result<Self> {
         let (ws, _) = tokio_tungstenite::connect_async(dest).await?;
-        let connection = Connection::new(ws);
+        let connection = Connection::new(ws, true);
         Ok(Self {
             connection,
             authed: AtomicBool::new(false),
@@ -30,58 +27,25 @@ impl<N: Network> Client<N> {
         if self.is_authed() {
             return Err(anyhow::anyhow!("Already authed"));
         }
-        self.connection.write_pool_message(PoolMessage::AuthRequest(request)).await?;
-        let response = self
-            .connection
-            .read_pool_message()
-            .await?
-            .auth_response()
-            .ok_or(anyhow::anyhow!("Unexpected message type"))?;
+        self.connection.send(PoolMessage::AuthRequest(request)).await?;
+        let response = self.connection.next_auth_response().await?;
         self.authed.store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(response)
     }
 
-    pub async fn subscribe(&mut self) -> anyhow::Result<Receiver<anyhow::Result<NewTask<N>>>> {
+    pub async fn next_task(&mut self) -> anyhow::Result<NewTask<N>> {
         if !self.is_authed() {
             return Err(anyhow::anyhow!("Not authed"));
         }
-        let mut incoming = self
-            .connection
-            .take_stream()
-            .await?
-            .ok_or(anyhow::anyhow!("Connection to server has broken or stream has been taken"))?;
-        let (tx, rx) = tokio::sync::mpsc::channel(1);
-        tokio::spawn(async move {
-            loop {
-                // Only handle the PollMessage::NewTask from incoming stream,
-                // break if any other message type is received
-                match read_pool_message_from_stream::<N>(&mut incoming).await {
-                    Ok(PoolMessage::NewTask(task)) => {
-                        if tx.send(Ok(task)).await.is_err() {
-                            break;
-                        }
-                    }
-                    Ok(_) => {
-                        if tx.send(Err(anyhow::anyhow!("Unexpected message type"))).await.is_err() {
-                            break;
-                        }
-                    }
-                    Err(err) => {
-                        if tx.send(Err(err)).await.is_err() {
-                            break;
-                        }
-                    }
-                }
-            }
-        });
-        Ok(rx)
+        let task = self.connection.next_task().await?;
+        Ok(task)
     }
 
-    pub async fn send_solution(&mut self, solution: NewSolution<N>) -> anyhow::Result<()> {
+    pub async fn send_solution(&self, solution: NewSolution<N>) -> anyhow::Result<()> {
         if !self.is_authed() {
             return Err(anyhow::anyhow!("Not authed"));
         }
-        self.connection.write_pool_message(PoolMessage::NewSolution(solution)).await?;
+        self.connection.send(PoolMessage::NewSolution(solution)).await?;
         Ok(())
     }
 }
