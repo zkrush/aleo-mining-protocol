@@ -47,7 +47,7 @@ impl<N: Network> Connection<N> {
             tokio::select! {
                 message = outgoing_rx.recv() => {
                     let message: PoolMessage<N> = message.ok_or_else(|| anyhow::anyhow!("client dropped"))?;
-                    ws.send(message.into()).await?;
+                    ws.send(message.try_into()?).await?;
                 }
                 result = ws.next() => {
                     let message: Message = result.ok_or_else(|| anyhow::anyhow!("connection closed"))??;
