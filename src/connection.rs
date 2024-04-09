@@ -6,7 +6,6 @@ use futures_util::{
     StreamExt,
 };
 use snarkvm::prelude::Network;
-use std::marker::PhantomData;
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream as TokioWebSocketStream};
@@ -18,7 +17,6 @@ pub type SplitSink = FutureSplitSink<WebSocketStream, Message>;
 pub struct Connection<N: Network> {
     incoming_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
     outgoing_tx: tokio::sync::mpsc::Sender<PoolMessage<N>>,
-    _p: PhantomData<N>,
 }
 
 impl<N: Network> Connection<N> {
@@ -26,11 +24,7 @@ impl<N: Network> Connection<N> {
         let (outgoing_tx, outgoing_rx) = tokio::sync::mpsc::channel(1);
         let (incoming_tx, incoming_rx) = tokio::sync::mpsc::channel(1);
         tokio::spawn(Self::handle_inner(ws, outgoing_rx, incoming_tx, enable_hb));
-        Self {
-            incoming_rx,
-            outgoing_tx,
-            _p: PhantomData,
-        }
+        Self { incoming_rx, outgoing_tx }
     }
 
     pub async fn handle_inner(

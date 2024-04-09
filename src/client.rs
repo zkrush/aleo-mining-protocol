@@ -1,50 +1,43 @@
 use crate::{connection::Connection, AuthRequest, AuthResponse, NewTask};
 use crate::{NewSolution, PoolMessage};
-use std::sync::atomic::AtomicBool;
+use snarkvm::console::network::MainnetV0;
+// Client state
+pub struct Connected;
+pub struct Authed;
 
-use snarkvm::prelude::Network;
-
-pub struct Client<N: Network> {
-    authed: AtomicBool,
-    connection: Connection<N>,
+pub struct MainnetClient<S> {
+    connection: Connection<MainnetV0>,
+    state: S,
 }
 
-impl<N: Network> Client<N> {
-    fn is_authed(&self) -> bool {
-        self.authed.load(std::sync::atomic::Ordering::SeqCst)
-    }
+pub async fn connect(dest: &str) -> anyhow::Result<MainnetClient<Connected>> {
+    let (ws, _) = tokio_tungstenite::connect_async(dest).await?;
+    let connection = Connection::new(ws, true);
+    Ok(MainnetClient {
+        connection,
+        state: Connected,
+    })
+}
 
-    pub async fn connect(dest: &str) -> anyhow::Result<Self> {
-        let (ws, _) = tokio_tungstenite::connect_async(dest).await?;
-        let connection = Connection::new(ws, true);
-        Ok(Self {
-            connection,
-            authed: AtomicBool::new(false),
-        })
-    }
-
-    pub async fn auth(&mut self, request: AuthRequest) -> anyhow::Result<AuthResponse<N>> {
-        if self.is_authed() {
-            return Err(anyhow::anyhow!("Already authed"));
-        }
+impl MainnetClient<Connected> {
+    pub async fn auth(mut self, request: AuthRequest) -> anyhow::Result<(MainnetClient<Authed>, AuthResponse<MainnetV0>)> {
         self.connection.send(PoolMessage::AuthRequest(request)).await?;
         let response = self.connection.next_auth_response().await?;
-        self.authed.store(true, std::sync::atomic::Ordering::SeqCst);
-        Ok(response)
+        let client = MainnetClient {
+            connection: self.connection,
+            state: Authed,
+        };
+        Ok((client, response))
     }
+}
 
-    pub async fn next_task(&mut self) -> anyhow::Result<NewTask<N>> {
-        if !self.is_authed() {
-            return Err(anyhow::anyhow!("Not authed"));
-        }
+impl MainnetClient<Authed> {
+    pub async fn next_task(&mut self) -> anyhow::Result<NewTask<MainnetV0>> {
         let task = self.connection.next_task().await?;
         Ok(task)
     }
 
-    pub async fn send_solution(&self, solution: NewSolution<N>) -> anyhow::Result<()> {
-        if !self.is_authed() {
-            return Err(anyhow::anyhow!("Not authed"));
-        }
+    pub async fn send_solution(&self, solution: NewSolution<MainnetV0>) -> anyhow::Result<()> {
         self.connection.send(PoolMessage::NewSolution(solution)).await?;
         Ok(())
     }
