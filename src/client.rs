@@ -1,12 +1,12 @@
 use crate::{connection::Connection, AuthRequest, AuthResponse, NewTask};
 use crate::{NewSolution, PoolMessage};
-use snarkvm::console::network::MainnetV0;
+use snarkvm::console::network::TestnetV0;
 // Client state
 pub struct Connected;
 pub struct Authed;
 
 pub struct MainnetClient<S> {
-    connection: Connection<MainnetV0>,
+    connection: Connection<TestnetV0>,
     state: S,
 }
 
@@ -20,7 +20,7 @@ pub async fn connect(dest: &str) -> anyhow::Result<MainnetClient<Connected>> {
 }
 
 impl MainnetClient<Connected> {
-    pub async fn auth(mut self, request: AuthRequest) -> anyhow::Result<(MainnetClient<Authed>, AuthResponse<MainnetV0>)> {
+    pub async fn auth(mut self, request: AuthRequest) -> anyhow::Result<(MainnetClient<Authed>, AuthResponse<TestnetV0>)> {
         self.connection.send(PoolMessage::AuthRequest(request)).await?;
         let response = self.connection.next_auth_response().await?;
         let client = MainnetClient {
@@ -32,12 +32,12 @@ impl MainnetClient<Connected> {
 }
 
 impl MainnetClient<Authed> {
-    pub async fn next_task(&mut self) -> anyhow::Result<NewTask<MainnetV0>> {
+    pub async fn next_task(&mut self) -> anyhow::Result<NewTask<TestnetV0>> {
         let task = self.connection.next_task().await?;
         Ok(task)
     }
 
-    pub async fn send_solution(&self, solution: NewSolution<MainnetV0>) -> anyhow::Result<()> {
+    pub async fn send_solution(&self, solution: NewSolution<TestnetV0>) -> anyhow::Result<()> {
         self.connection.send(PoolMessage::NewSolution(solution)).await?;
         Ok(())
     }
