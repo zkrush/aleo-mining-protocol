@@ -21,12 +21,12 @@ serde = { version = "1", features = ["derive"] }
 
 anyhow = { version = "1" }
 tokio = { version = "1", features = ["full"], optional = true }
-tokio-tungstenite = { version = "0.20" }
+tokio-tungstenite = { version = "0.20", features = ["native-tls-vendored"] }
 futures-util = { version = "0.3.28", optional = true }
 
 [dependencies.snarkvm]
 git = "ssh://git@github.com/AleoNet/snarkVM.git"
-branch = "mainnet-staging"
+branch = "mainnet"
 features = ["circuit", "console", "algorithms", "curves"]
 
 [features]
