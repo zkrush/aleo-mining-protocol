@@ -8,7 +8,7 @@ pub struct Authed;
 
 pub struct PoolClient<S, N: Network> {
     connection: Connection<N>,
-    state: S,
+    _state: S,
 }
 
 pub async fn connect<N: Network>(dest: &str) -> anyhow::Result<PoolClient<Connected, N>> {
@@ -16,7 +16,7 @@ pub async fn connect<N: Network>(dest: &str) -> anyhow::Result<PoolClient<Connec
     let connection = Connection::new(ws, true);
     Ok(PoolClient {
         connection,
-        state: Connected,
+        _state: Connected,
     })
 }
 
@@ -26,7 +26,7 @@ impl<N: Network> PoolClient<Connected, N> {
         let response = self.connection.next_auth_response().await?;
         let client = PoolClient {
             connection: self.connection,
-            state: Authed,
+            _state: Authed,
         };
         Ok((client, response))
     }
