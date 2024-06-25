@@ -1,29 +1,30 @@
 use crate::{connection::Connection, AuthRequest, AuthResponse, NewTask};
 use crate::{NewSolution, PoolMessage};
-use snarkvm::console::network::TestnetV0;
+use snarkvm::prelude::Network;
+
 // Client state
 pub struct Connected;
 pub struct Authed;
 
-pub struct MainnetClient<S> {
-    connection: Connection<TestnetV0>,
+pub struct PoolClient<S, N: Network> {
+    connection: Connection<N>,
     state: S,
 }
 
-pub async fn connect(dest: &str) -> anyhow::Result<MainnetClient<Connected>> {
+pub async fn connect<N: Network>(dest: &str) -> anyhow::Result<PoolClient<Connected, N>> {
     let (ws, _) = tokio_tungstenite::connect_async(dest).await?;
     let connection = Connection::new(ws, true);
-    Ok(MainnetClient {
+    Ok(PoolClient {
         connection,
         state: Connected,
     })
 }
 
-impl MainnetClient<Connected> {
-    pub async fn auth(mut self, request: AuthRequest) -> anyhow::Result<(MainnetClient<Authed>, AuthResponse<TestnetV0>)> {
+impl<N: Network> PoolClient<Connected, N> {
+    pub async fn auth(mut self, request: AuthRequest) -> anyhow::Result<(PoolClient<Authed, N>, AuthResponse<N>)> {
         self.connection.send(PoolMessage::AuthRequest(request)).await?;
         let response = self.connection.next_auth_response().await?;
-        let client = MainnetClient {
+        let client = PoolClient {
             connection: self.connection,
             state: Authed,
         };
@@ -31,13 +32,13 @@ impl MainnetClient<Connected> {
     }
 }
 
-impl MainnetClient<Authed> {
-    pub async fn next_task(&mut self) -> anyhow::Result<NewTask<TestnetV0>> {
+impl<N: Network> PoolClient<Authed, N> {
+    pub async fn next_task(&mut self) -> anyhow::Result<NewTask<N>> {
         let task = self.connection.next_task().await?;
         Ok(task)
     }
 
-    pub async fn send_solution(&self, solution: NewSolution<TestnetV0>) -> anyhow::Result<()> {
+    pub async fn send_solution(&self, solution: NewSolution<N>) -> anyhow::Result<()> {
         self.connection.send(PoolMessage::NewSolution(solution)).await?;
         Ok(())
     }
