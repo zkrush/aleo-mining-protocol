@@ -25,8 +25,8 @@ tokio-tungstenite = { version = "0.20" }
 futures-util = { version = "0.3.28", optional = true }
 
 [dependencies.snarkvm]
-git = "ssh://git@github.com/AleoNet/snarkVM.git"
-branch = "mainnet-staging"
+git = "ssh://git@github.com/ProvableHQ/snarkVM.git"
+branch = "feat/update-puzzle"
 features = ["circuit", "console", "algorithms", "curves"]
 
 [features]
