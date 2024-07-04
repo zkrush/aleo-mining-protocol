@@ -97,8 +97,7 @@ pub struct NewTask<N: Network> {
     pub epoch_hash: <N>::BlockHash,
     pub address: Address<N>,
     pub difficulty: u64,
-
-    pub codes: String,
+    pub codes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
