@@ -98,7 +98,7 @@ pub struct NewTask<N: Network> {
     pub address: Address<N>,
     pub difficulty: u64,
 
-    pub codes: Vec<u8>
+    pub codes: String
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
