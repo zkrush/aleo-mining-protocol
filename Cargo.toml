@@ -24,10 +24,15 @@ tokio = { version = "1", features = ["full"], optional = true }
 tokio-tungstenite = { version = "0.20" }
 futures-util = { version = "0.3.28", optional = true }
 
+#[dependencies.snarkvm]
+#git = "ssh://git@github.com/AleoNet/snarkVM.git"
+#branch = "mainnet"
+#features = ["circuit", "console", "algorithms", "curves"]
+
 [dependencies.snarkvm]
-git = "ssh://git@github.com/AleoNet/snarkVM.git"
-branch = "mainnet"
-features = ["circuit", "console", "algorithms", "curves"]
+git = "ssh://git@github.com/IPFS-Force/snarkVM.git"
+features = ["console", "synthesizer", "curves", "algorithms", "ledger"]
+branch = "mainnet_prover"
 
 [features]
 client = ["tokio", "futures-util"]
