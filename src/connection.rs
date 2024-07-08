@@ -5,7 +5,6 @@ use futures_util::{
     stream::{SplitSink as FutureSplitSink, SplitStream as FutureSplitStream},
     StreamExt,
 };
-use log::trace;
 use snarkvm::prelude::Network;
 
 use tokio::net::TcpStream;
@@ -71,7 +70,6 @@ impl<N: Network> Connection<N> {
                         }
                         ws.send(Message::Ping(vec![])).await?;
                         ping_counter += 1;
-                        trace!("Sent ping to server, ping counter: {ping_counter}");
                     }
                 }
             }
