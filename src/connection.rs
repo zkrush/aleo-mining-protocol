@@ -20,10 +20,10 @@ pub struct Connection<N: Network> {
 }
 
 impl<N: Network> Connection<N> {
-    pub fn new(ws: WebSocketStream, enable_hb: bool) -> Self {
+    pub fn new(ws: WebSocketStream) -> Self {
         let (outgoing_tx, outgoing_rx) = tokio::sync::mpsc::channel(1);
         let (incoming_tx, incoming_rx) = tokio::sync::mpsc::channel(1);
-        tokio::spawn(Self::handle_inner(ws, outgoing_rx, incoming_tx, enable_hb));
+        tokio::spawn(Self::handle_inner(ws, outgoing_rx, incoming_tx));
         Self { incoming_rx, outgoing_tx }
     }
 
@@ -31,7 +31,6 @@ impl<N: Network> Connection<N> {
         mut ws: WebSocketStream,
         mut outgoing_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
         incoming_tx: tokio::sync::mpsc::Sender<PoolMessage<N>>,
-        enable_hb: bool,
     ) -> anyhow::Result<()> {
         let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(15));
         // 1.Receive messages from the outgoing_rx and send them though the websocket
@@ -64,13 +63,11 @@ impl<N: Network> Connection<N> {
                     }
                 }
                 _ = heartbeat.tick() => {
-                    if enable_hb {
-                        if ping_counter >= 3 {
-                            anyhow::bail!("Connection broken");
-                        }
-                        ws.send(Message::Ping(vec![])).await?;
-                        ping_counter += 1;
+                    if ping_counter >= 3 {
+                        anyhow::bail!("Connection broken");
                     }
+                    ws.send(Message::Ping(vec![])).await?;
+                    ping_counter += 1;
                 }
             }
         }
