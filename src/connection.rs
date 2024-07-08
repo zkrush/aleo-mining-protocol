@@ -5,6 +5,7 @@ use futures_util::{
     stream::{SplitSink as FutureSplitSink, SplitStream as FutureSplitStream},
     StreamExt,
 };
+use log::trace;
 use snarkvm::prelude::Network;
 
 use tokio::net::TcpStream;
@@ -37,6 +38,7 @@ impl<N: Network> Connection<N> {
         // 1.Receive messages from the outgoing_rx and send them though the websocket
         // 2.When receive from the websocket, send them through the incoming_tx
         // 3. Send ping to the websocket every 15 seconds
+        let mut ping_counter = 0;
         loop {
             tokio::select! {
                 message = outgoing_rx.recv() => {
@@ -54,7 +56,8 @@ impl<N: Network> Connection<N> {
                             ws.send(Message::Pong(vec![])).await?;
                         },
                         Message::Pong(_) => {
-                            // ignore
+                            // Reset the ping counter
+                            ping_counter = 0;
                         },
                         _ => {
                             anyhow::bail!("Unexpected message type");
@@ -63,7 +66,12 @@ impl<N: Network> Connection<N> {
                 }
                 _ = heartbeat.tick() => {
                     if enable_hb {
+                        if ping_counter >= 3 {
+                            anyhow::bail!("Connection broken");
+                        }
                         ws.send(Message::Ping(vec![])).await?;
+                        ping_counter += 1;
+                        trace!("Sent ping to server, ping counter: {ping_counter}");
                     }
                 }
             }
