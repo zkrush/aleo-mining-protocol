@@ -2,9 +2,11 @@
 pub mod client;
 #[cfg(feature = "client")]
 pub mod connection;
+
 use serde::{Deserialize, Serialize};
 use snarkvm::ledger::puzzle::Solution;
 use snarkvm::prelude::{Address, Network};
+use std::sync::Arc;
 use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -98,7 +100,7 @@ pub struct NewTask<N: Network> {
     pub address: Address<N>,
     pub difficulty: u64,
 
-    pub codes: String
+    pub codes: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

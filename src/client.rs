@@ -1,6 +1,7 @@
 use crate::{connection::Connection, AuthRequest, AuthResponse, NewTask};
 use crate::{NewSolution, PoolMessage};
 use snarkvm::prelude::Network;
+use std::sync::Arc;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 // Client state
@@ -13,7 +14,7 @@ pub struct PoolClient<S, N: Network> {
 }
 
 pub async fn connect<N: Network>(dest: &str) -> anyhow::Result<PoolClient<Connected, N>> {
-    let (ws, _)  = tokio_tungstenite::connect_async_with_config(dest, Some(WebSocketConfig::default()), false).await?;
+    let (ws, _) = tokio_tungstenite::connect_async_with_config(dest, Some(WebSocketConfig::default()), false).await?;
     let connection = Connection::new(ws);
     Ok(PoolClient {
         connection,
