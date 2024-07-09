@@ -2,6 +2,8 @@
 pub mod client;
 #[cfg(feature = "client")]
 pub mod connection;
+
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use snarkvm::ledger::puzzle::Solution;
 use snarkvm::prelude::{Address, Network};
@@ -90,6 +92,7 @@ pub struct AuthResponse<N: Network> {
     pub message: Option<String>,
 }
 
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(bound(serialize = "N: Serialize", deserialize = "N: for<'a> Deserialize<'a>"))]
 pub struct NewTask<N: Network> {
@@ -98,7 +101,7 @@ pub struct NewTask<N: Network> {
     pub address: Address<N>,
     pub difficulty: u64,
 
-    pub codes: String
+    pub codes: Arc<String>
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
