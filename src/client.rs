@@ -13,7 +13,10 @@ pub struct PoolClient<S, N: Network> {
 }
 
 pub async fn connect<N: Network>(dest: &str) -> anyhow::Result<PoolClient<Connected, N>> {
-    let (ws, _)  = tokio_tungstenite::connect_async_with_config(dest, Some(WebSocketConfig::default()), false).await?;
+    let mut config = WebSocketConfig::default();
+    config.max_message_size = None;
+    config.max_frame_size = None;
+    let (ws, _)  = tokio_tungstenite::connect_async_with_config(dest, Some(config), false).await?;
     let connection = Connection::new(ws);
     Ok(PoolClient {
         connection,
