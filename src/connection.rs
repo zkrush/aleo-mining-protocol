@@ -54,7 +54,8 @@ impl<N: Network> Connection<N> {
                             ws.send(Message::Pong(vec![])).await?;
                         },
                         Message::Pong(_) => {
-                            // ignore
+                            // Reset the ping counter
+                            ping_counter = 0;
                         },
                         _ => {
                             anyhow::bail!("Unexpected message type");
