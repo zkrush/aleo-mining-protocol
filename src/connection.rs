@@ -1,18 +1,13 @@
 use crate::{AuthRequest, AuthResponse, NewSolution, NewTask, PoolMessage};
 
 use futures_util::SinkExt;
-use futures_util::{
-    stream::{SplitSink as FutureSplitSink, SplitStream as FutureSplitStream},
-    StreamExt,
-};
+use futures_util::StreamExt;
 use snarkvm::prelude::Network;
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream as TokioWebSocketStream};
 
-type WebSocketStream = TokioWebSocketStream<MaybeTlsStream<TcpStream>>;
-pub type SplitStream = FutureSplitStream<WebSocketStream>;
-pub type SplitSink = FutureSplitSink<WebSocketStream, Message>;
+pub type WebSocketStream = TokioWebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub struct Connection<N: Network> {
     incoming_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
@@ -27,7 +22,7 @@ impl<N: Network> Connection<N> {
         Self { incoming_rx, outgoing_tx }
     }
 
-    pub async fn handle_inner(
+    async fn handle_inner(
         mut ws: WebSocketStream,
         mut outgoing_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
         incoming_tx: tokio::sync::mpsc::Sender<PoolMessage<N>>,
@@ -105,5 +100,85 @@ impl<N: Network> Connection<N> {
         let message = self.next().await?;
         let task = message.new_task().ok_or_else(|| anyhow::anyhow!("Unexpected message type"))?;
         Ok(task)
+    }
+}
+
+mod tls_connection {
+    use super::*;
+    use crate::tls::{handshake_as_client, handshake_as_server, SharedKey};
+
+    impl<N: Network> Connection<N> {
+        pub fn connect_tls(ws: WebSocketStream) -> Self {
+            let (outgoing_tx, outgoing_rx) = tokio::sync::mpsc::channel(1);
+            let (incoming_tx, incoming_rx) = tokio::sync::mpsc::channel(1);
+            tokio::spawn(Self::handle_inner_tls(ws, outgoing_rx, incoming_tx, |ws| async move {
+                handshake_as_client(ws).await
+            }));
+            Self{ incoming_rx, outgoing_tx}
+        }
+
+        pub fn accept_tls(ws: WebSocketStream) -> Self
+        where
+        {
+            let (outgoing_tx, outgoing_rx) = tokio::sync::mpsc::channel(1);
+            let (incoming_tx, incoming_rx) = tokio::sync::mpsc::channel(1);
+            tokio::spawn(Self::handle_inner_tls(ws, outgoing_rx, incoming_tx, |ws| async move {
+                handshake_as_server(ws).await
+            }));
+            Self { incoming_rx, outgoing_tx }
+        }
+
+        async fn handle_inner_tls<F, Fut>(
+            ws: WebSocketStream,
+            mut outgoing_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
+            incoming_tx: tokio::sync::mpsc::Sender<PoolMessage<N>>,
+            f: F,
+        ) -> anyhow::Result<()>
+        where
+            F: FnOnce(WebSocketStream) -> Fut + Send + 'static,
+            Fut: std::future::Future<Output = anyhow::Result<(WebSocketStream, SharedKey)>> + Send + 'static,
+        {
+            let (mut ws, shared_key) = f(ws).await?;
+            let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(15));
+            let mut ping_counter = 0;
+
+            loop {
+                tokio::select! {
+                    message = outgoing_rx.recv() => {
+                        let message: PoolMessage<N> = message.ok_or_else(|| anyhow::anyhow!("client dropped"))?;
+                        let message_data = bincode::serialize(&message)?;
+                        let encrypted_message_data = shared_key.encrypt(&message_data)?;
+                        ws.send(encrypted_message_data.try_into()?).await?;
+                    }
+                    result = ws.next() => {
+                        let message: Message = result.ok_or_else(|| anyhow::anyhow!("connection closed"))??;
+                        match message {
+                            Message::Ping(_) => {
+                                ws.send(Message::Pong(vec![])).await?;
+                            },
+                            Message::Pong(_) => {
+                                // Reset the ping counter
+                                ping_counter = 0;
+                            },
+                            Message::Binary(data) => {
+                                let data = shared_key.decrypt(&data)?;
+                                let pool_msg: PoolMessage<N> = bincode::deserialize(&data)?;
+                                incoming_tx.send(pool_msg).await?;
+                            },
+                            _ => {
+                                anyhow::bail!("Unexpected message type");
+                            }
+                        }
+                    }
+                    _ = heartbeat.tick() => {
+                        if ping_counter >= 3 {
+                            anyhow::bail!("Connection broken");
+                        }
+                        ws.send(Message::Ping(vec![])).await?;
+                        ping_counter += 1;
+                    }
+                }
+            }
+        }
     }
 }

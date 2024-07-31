@@ -1,7 +1,10 @@
+pub mod tls;
+
 #[cfg(feature = "client")]
 pub mod client;
 #[cfg(feature = "client")]
 pub mod connection;
+
 use serde::{Deserialize, Serialize};
 use snarkvm::ledger::puzzle::Solution;
 use snarkvm::prelude::{Address, Network};
