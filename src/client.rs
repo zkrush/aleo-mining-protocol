@@ -14,7 +14,7 @@ pub struct PoolClient<S, N: Network> {
 
 pub async fn connect<N: Network>(dest: &str) -> anyhow::Result<PoolClient<Connected, N>> {
     let (ws, _) = tokio_tungstenite::connect_async_with_config(dest, Some(WebSocketConfig::default()), false).await?;
-    let connection = Connection::new(ws);
+    let connection = Connection::connect_tls(ws);
     Ok(PoolClient {
         connection,
         _state: Connected,

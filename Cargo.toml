@@ -24,6 +24,15 @@ tokio = { version = "1", features = ["full"], optional = true }
 tokio-tungstenite = { version = "0.20" }
 futures-util = { version = "0.3.28", optional = true }
 
+# Internal TLS
+rsa = "0.9"
+ring = "0.17"
+aes-gcm = "0.10"
+sha2 = "0.10"
+hkdf = "0.12"
+rand = "0.8"
+bincode = "1"
+
 [dependencies.snarkvm]
 git = "ssh://git@github.com/AleoNet/snarkVM.git"
 branch = "mainnet"
@@ -31,4 +40,4 @@ features = ["circuit", "console", "algorithms", "curves"]
 
 [features]
 client = ["tokio", "futures-util"]
-pubsub = ["tokio", "futures-util"]
+server = []
