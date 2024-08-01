@@ -111,20 +111,15 @@ mod tls_connection {
         pub fn connect_tls(ws: WebSocketStream) -> Self {
             let (outgoing_tx, outgoing_rx) = tokio::sync::mpsc::channel(1);
             let (incoming_tx, incoming_rx) = tokio::sync::mpsc::channel(1);
-            tokio::spawn(Self::handle_inner_tls(ws, outgoing_rx, incoming_tx, |ws| async move {
-                handshake_as_client(ws).await
-            }));
-            Self{ incoming_rx, outgoing_tx}
+            tokio::spawn(Self::handle_inner_tls(ws, outgoing_rx, incoming_tx, handshake_as_client));
+            Self { incoming_rx, outgoing_tx }
         }
 
         pub fn accept_tls(ws: WebSocketStream) -> Self
-        where
-        {
+where {
             let (outgoing_tx, outgoing_rx) = tokio::sync::mpsc::channel(1);
             let (incoming_tx, incoming_rx) = tokio::sync::mpsc::channel(1);
-            tokio::spawn(Self::handle_inner_tls(ws, outgoing_rx, incoming_tx, |ws| async move {
-                handshake_as_server(ws).await
-            }));
+            tokio::spawn(Self::handle_inner_tls(ws, outgoing_rx, incoming_tx, handshake_as_server));
             Self { incoming_rx, outgoing_tx }
         }
 
@@ -138,7 +133,13 @@ mod tls_connection {
             F: FnOnce(WebSocketStream) -> Fut + Send + 'static,
             Fut: std::future::Future<Output = anyhow::Result<(WebSocketStream, SharedKey)>> + Send + 'static,
         {
-            let (mut ws, shared_key) = f(ws).await?;
+            let (mut ws, shared_key) = match f(ws).await {
+                Ok((ws, shared_key)) => (ws, shared_key),
+                Err(err) => {
+                    println!("TLS handshake failed: {:?}", err);
+                    return Err(err);
+                }
+            };
             let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(15));
             let mut ping_counter = 0;
 
@@ -146,9 +147,9 @@ mod tls_connection {
                 tokio::select! {
                     message = outgoing_rx.recv() => {
                         let message: PoolMessage<N> = message.ok_or_else(|| anyhow::anyhow!("client dropped"))?;
-                        let message_data = bincode::serialize(&message)?;
+                        let message_data = serde_json::to_vec(&message)?;
                         let encrypted_message_data = shared_key.encrypt(&message_data)?;
-                        ws.send(encrypted_message_data.try_into()?).await?;
+                        ws.send(encrypted_message_data.into()).await?;
                     }
                     result = ws.next() => {
                         let message: Message = result.ok_or_else(|| anyhow::anyhow!("connection closed"))??;
@@ -162,7 +163,7 @@ mod tls_connection {
                             },
                             Message::Binary(data) => {
                                 let data = shared_key.decrypt(&data)?;
-                                let pool_msg: PoolMessage<N> = bincode::deserialize(&data)?;
+                                let pool_msg: PoolMessage<N> = serde_json::from_slice(&data)?;
                                 incoming_tx.send(pool_msg).await?;
                             },
                             _ => {

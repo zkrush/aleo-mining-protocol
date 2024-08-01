@@ -31,7 +31,6 @@ pub fn sign(data: &[u8], private_key: &RsaPrivateKey) -> anyhow::Result<Vec<u8>>
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_sample_key_pair() {
