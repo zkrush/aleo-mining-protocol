@@ -40,4 +40,4 @@ features = ["circuit", "console", "algorithms", "curves"]
 
 [features]
 client = ["tokio", "futures-util"]
-pubsub = ["tokio", "futures-util"]
+server = []

@@ -10,8 +10,8 @@ use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream as
 pub type WebSocketStream = TokioWebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub struct Connection<N: Network> {
-    incoming_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
-    outgoing_tx: tokio::sync::mpsc::Sender<PoolMessage<N>>,
+    pub(crate) incoming_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
+    pub(crate) outgoing_tx: tokio::sync::mpsc::Sender<PoolMessage<N>>,
 }
 
 impl<N: Network> Connection<N> {
@@ -105,25 +105,10 @@ impl<N: Network> Connection<N> {
 
 mod tls_connection {
     use super::*;
-    use crate::tls::{handshake_as_client, handshake_as_server, SharedKey};
+    use crate::tls::SharedKey;
 
     impl<N: Network> Connection<N> {
-        pub fn connect_tls(ws: WebSocketStream) -> Self {
-            let (outgoing_tx, outgoing_rx) = tokio::sync::mpsc::channel(1);
-            let (incoming_tx, incoming_rx) = tokio::sync::mpsc::channel(1);
-            tokio::spawn(Self::handle_inner_tls(ws, outgoing_rx, incoming_tx, handshake_as_client));
-            Self { incoming_rx, outgoing_tx }
-        }
-
-        pub fn accept_tls(ws: WebSocketStream) -> Self
-where {
-            let (outgoing_tx, outgoing_rx) = tokio::sync::mpsc::channel(1);
-            let (incoming_tx, incoming_rx) = tokio::sync::mpsc::channel(1);
-            tokio::spawn(Self::handle_inner_tls(ws, outgoing_rx, incoming_tx, handshake_as_server));
-            Self { incoming_rx, outgoing_tx }
-        }
-
-        async fn handle_inner_tls<F, Fut>(
+        pub(crate) async fn handle_inner_tls<F, Fut>(
             ws: WebSocketStream,
             mut outgoing_rx: tokio::sync::mpsc::Receiver<PoolMessage<N>>,
             incoming_tx: tokio::sync::mpsc::Sender<PoolMessage<N>>,
